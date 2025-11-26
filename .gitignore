@@ -1,0 +1,36 @@
+# Videos
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+venv2/
+env/
+.env
+
+# YOLO / Ultralytics
+runs/
+models/
+*.pt
+*.onnx
+
+# Data & Datasets
+data/images/
+data/labels/
+data/raw_images/
+data/raw_labels/
+!data/images/.gitkeep
+!data/labels/.gitkeep
+
+# Logs & Temp
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
