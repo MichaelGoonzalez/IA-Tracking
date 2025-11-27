@@ -64,11 +64,38 @@ def split_dataset(images_source, labels_source, dest_dir, split_ratio=0.8):
     logger.info(f"Entrenamiento: {len(train_pairs)}")
     logger.info(f"Validacion: {len(val_pairs)}")
 
-    # Copiar archivos
+    # Copiar archivos con renombrado automático para evitar colisiones
     def copy_files(file_pairs, img_dest, lbl_dest):
+        renamed_count = 0
         for img, lbl in file_pairs:
-            shutil.copy2(os.path.join(images_source, img), os.path.join(img_dest, img))
-            shutil.copy2(os.path.join(labels_source, lbl), os.path.join(lbl_dest, lbl))
+            base_name, ext = os.path.splitext(img)
+            
+            # Determinar nombre único en destino
+            counter = 1
+            new_img_name = img
+            new_lbl_name = lbl
+            
+            final_img_path = os.path.join(img_dest, new_img_name)
+            final_lbl_path = os.path.join(lbl_dest, new_lbl_name)
+            
+            while os.path.exists(final_img_path) or os.path.exists(final_lbl_path):
+                # Generar nombre nuevo: imagen_v1.jpg, imagen_v2.jpg...
+                new_base_name = f"{base_name}_v{counter}"
+                new_img_name = f"{new_base_name}{ext}"
+                new_lbl_name = f"{new_base_name}.txt"
+                
+                final_img_path = os.path.join(img_dest, new_img_name)
+                final_lbl_path = os.path.join(lbl_dest, new_lbl_name)
+                counter += 1
+            
+            if counter > 1:
+                renamed_count += 1
+                
+            shutil.copy2(os.path.join(images_source, img), final_img_path)
+            shutil.copy2(os.path.join(labels_source, lbl), final_lbl_path)
+        
+        if renamed_count > 0:
+            logger.info(f"Se renombraron {renamed_count} archivos para evitar sobrescribir datos existentes.")
 
     logger.info("Copiando archivos de entrenamiento...")
     copy_files(train_pairs, train_images_dir, train_labels_dir)

@@ -6,25 +6,23 @@ data_yaml: "data/dataset.yaml"
 project_name: "paquetes_tracking"
 output_dir: "models/"
 
-# Hiperparámetros de entrenamiento
-model: "yolov8n.pt"  # Modelo base (nano para velocidad, se puede cambiar a 's', 'm', 'l', 'x')
-epochs: 50
-batch_size: 16
-imgsz: 640
-device: "0" # "0" para GPU, "cpu" para CPU. El script validará si la GPU está disponible.
+# Hiperparámetros de entrenamiento (Optimizado para Equilibrio Precisión/Velocidad)
+model: "yolov8s.pt"  # Cambiado a SMALL para mejor precisión manteniendo velocidad aceptable
+epochs: 100          # Aumentado para dar más tiempo de aprendizaje
+batch_size: 16       # Ajustar si falta memoria VRAM (bajar a 8 si falla)
+imgsz: 640           # Mantener en 640 para velocidad en tiempo real con 7 cámaras
+device: "0"          # GPU RTX 2050
 
-# Augmentations (Valores típicos, ajustables según necesidad)
-# Estas configuraciones a veces se pasan directamente al argumento 'args' en train() o se definen en un archivo separado
-# Sin embargo, definirlos aquí nos permite cargarlos dinámicamente si usamos un script de entrenamiento personalizado
+# Augmentations (Mejoradas para robustez)
 augmentations:
-  degrees: 10.0      # Rotación (+/- deg)
-  scale: 0.5         # Escala de ganancia (+/- gain)
-  shear: 0.0         # Cizallamiento (+/- deg)
-  perspective: 0.0   # Perspectiva (+/- fraction), rango 0-0.001
-  flipud: 0.0        # Voltear arriba-abajo (probabilidad)
-  fliplr: 0.5        # Voltear izquierda-derecha (probabilidad)
-  mosaic: 1.0        # Mosaico (probabilidad)
-  mixup: 0.0         # Mixup (probabilidad)
+  degrees: 15.0      # Aumentado rotación para paquetes desalineados
+  scale: 0.6         # Variación de tamaño ligeramente mayor
+  shear: 2.0         # Pequeña distorsión perspectiva
+  perspective: 0.0005 # Perspectiva leve
+  flipud: 0.0        # Vertical flip (usualmente no paquetes al revés en banda, 0.0 ok)
+  fliplr: 0.5        # Horizontal flip
+  mosaic: 1.0        # Mantiene mosaico (clave para objetos pequeños)
+  mixup: 0.1         # Activado levemente para mejorar generalización
 
 # Inferencia y Tracking
 conf_threshold: 0.25

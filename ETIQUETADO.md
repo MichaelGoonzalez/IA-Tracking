@@ -1,72 +1,59 @@
-# Guía de Etiquetado para el Video de la Banda Transportadora
+# Guía de Etiquetado y Mejora Continua del Modelo
 
-Para que el modelo aprenda a reconocer los paquetes en tu video, necesitamos seguir estos pasos:
+Para mejorar la precisión del modelo en tu entorno específico, sigue estos pasos para capturar nuevos datos, etiquetarlos y re-entrenar.
 
-## 1. Extraer Imágenes del Video
-Primero, vamos a convertir tu video en imágenes individuales (frames). No necesitamos todas, solo una muestra periódica.
+## 1. Capturar Imágenes (Data Mining)
 
-1. Abre una terminal.
-2. Ejecuta el script de extracción:
-   ```bash
-   python scripts/extract_frames.py --video prueba.mp4 --output data/raw_images --interval 10
-   ```
-   *   `--interval 10`: Guardará 1 frame de cada 10. Si el video es muy corto, baja este número (ej. 5). Si es muy largo, súbelo (ej. 30).
-   *   Las imágenes se guardarán en `data/raw_images`.
+En lugar de usar videos sueltos, ahora puedes capturar imágenes directamente de tus cámaras RTSP configuradas.
 
-## 2. Etiquetar las Imágenes (Label Labeling)
-Necesitamos dibujar cuadros alrededor de los paquetes en cada imagen para decirle a la IA "esto es un paquete".
-
-**Herramienta recomendada: LabelImg o CVAT**
-Para empezar rápido y localmente, usa **LabelImg**.
-
-### Instalación de LabelImg
+**Opción Automática (Recomendada):**
+Extrae una muestra de imágenes de TODAS las cámaras configuradas en tu `.env`.
 ```bash
-pip install labelImg
+venv\Scripts\python scripts/extract_frames.py
 ```
-O descargalo desde [su repositorio](https://github.com/heartexlabs/labelImg).
+*   Esto guardará 60 imágenes por cámara en `data/raw_images`.
+*   Las imágenes se toman cada 30 cuadros para asegurar variedad.
 
-### Pasos para Etiquetar
-1.  Ejecuta `labelImg` en tu terminal.
-2.  **Open Dir**: Selecciona la carpeta `data/raw_images`.
-3.  **Change Save Dir**: Crea una carpeta `data/raw_labels` y selecciónala.
-4.  **Importante**: En la barra lateral, asegúrate de que el formato sea **YOLO** (no PascalVOC).
-5.  Empieza a etiquetar:
-    *   Presiona `W` para crear un cuadro (`rectbox`).
-    *   Dibuja el cuadro alrededor del paquete.
-    *   Escribe `paquete` como nombre de la clase (o `0`).
-    *   Presiona `D` para pasar a la siguiente imagen.
-    *   Repite hasta terminar todas las imágenes.
-
-## 3. Organizar el Dataset
-YOLO necesita una estructura específica para entrenar. Vamos a dividir las imágenes y etiquetas en conjuntos de entrenamiento (`train`) y validación (`val`).
-
-Estructura final esperada:
-```
-data/
-├── images/
-│   ├── train/  (80% de las imágenes)
-│   └── val/    (20% de las imágenes)
-└── labels/
-    ├── train/  (80% de los .txt correspondientes)
-    └── val/    (20% de los .txt correspondientes)
-```
-
-**Script Automático (Opcional pero Recomendado)**
-Puedes mover los archivos manualmente, o crear un pequeño script de python para dividir `raw_images` y `raw_labels` en train/val aleatoriamente.
-
-## 4. Actualizar Configuración
-Una vez organizadas las carpetas, verifica `data/dataset.yaml`:
-
-```yaml
-path: ../data
-train: images/train
-val: images/val
-
-names:
-  0: paquete
-```
-
-## 5. Entrenar
-Ahora sí, ejecuta el entrenamiento:
+**Opción Manual:**
+Si prefieres usar un video grabado:
 ```bash
-python scripts/train.py
+venv\Scripts\python scripts/extract_frames.py --video tu_video.mp4
+```
+
+## 2. Etiquetar las Imágenes
+
+Usa **LabelImg** para dibujar cajas alrededor de los paquetes en las nuevas imágenes.
+
+1.  Abre LabelImg:
+    ```bash
+    labelimg
+    ```
+2.  **Open Dir**: Selecciona `data/raw_images`.
+3.  **Change Save Dir**: Selecciona `data/raw_labels`.
+4.  **Formato**: Asegúrate de que esté en **YOLO** (barra lateral).
+5.  Etiqueta los paquetes en cada imagen.
+
+## 3. Integrar y Entrenar
+
+Una vez etiquetadas, integra los nuevos datos al dataset principal y entrena.
+
+1.  **Organizar Dataset**:
+    Este comando toma tus nuevas imágenes/labels y las mezcla con el dataset histórico en `data/images`.
+    ```bash
+    venv\Scripts\python scripts/split_dataset.py --images data/raw_images --labels data/raw_labels
+    ```
+
+2.  **Re-Entrenar Modelo**:
+    ```bash
+    venv\Scripts\python scripts/train.py
+    ```
+    *   El sistema detectará que ya existe un modelo (`best.pt`) y lo usará como base.
+    *   Esto permite que el modelo aprenda de los nuevos casos sin olvidar lo anterior.
+
+## 4. Limpieza (Opcional)
+
+Si quieres empezar una nueva sesión de etiquetado desde cero (sin ver las imágenes que acabas de procesar en la carpeta raw), ejecuta:
+```bash
+venv\Scripts\python scripts/clean_raw_data.py
+```
+*Esto solo borra la carpeta temporal `raw`, no tus datos de entrenamiento consolidados.*

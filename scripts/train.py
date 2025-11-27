@@ -32,9 +32,19 @@ def train_model():
         # o fallará más adelante con un error claro.
     
     # Inicializar modelo
-    model_name = config.get("model", "yolov8n.pt")
-    logger.info(f"Cargando modelo: {model_name}")
-    model = YOLO(model_name)  # Carga un modelo pre-entrenado (recomendado para transfer learning)
+    # Verificar si existe un modelo entrenado previamente para continuar el entrenamiento
+    project_name = config.get("project_name", "yolo_project")
+    output_dir = config.get("output_dir", "models/")
+    trained_weights = os.path.join(output_dir, project_name, "weights/best.pt")
+    
+    if os.path.exists(trained_weights):
+        model_name = trained_weights
+        logger.info(f"Encontrado modelo previo. Continuando entrenamiento desde: {model_name}")
+    else:
+        model_name = config.get("model", "yolov8n.pt")
+        logger.info(f"No se encontró modelo previo. Iniciando desde base: {model_name}")
+        
+    model = YOLO(model_name)
 
     # Configurar argumentos de entrenamiento
     # Se pueden pasar muchos argumentos en el método train()
