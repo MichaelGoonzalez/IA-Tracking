@@ -5,9 +5,11 @@ train: images/train  # imágenes de entrenamiento (relative to 'path')
 val: images/val  # imágenes de validación (relative to 'path')
 # test: images/test # (opcional)
 
-# Número de clases
-nc: 1
+# Número de clases (Aumentado para soportar nuevas etiquetas)
+nc: 3
 
 # Nombres de clases
 names:
   0: paquete
+  1: objeto
+  2: caja

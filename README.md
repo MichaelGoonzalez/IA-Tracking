@@ -17,6 +17,7 @@ El sistema está diseñado para operar en un ciclo de alto rendimiento y mejora 
 -   **Visualización Grid**: Panel de monitoreo unificado que muestra todas las cámaras en tiempo real.
 -   **Procesamiento GPU Optimizado**: Inferencia en lote (batch) para maximizar el uso de hardware NVIDIA.
 -   **Entrenamiento Incremental**: Capacidad de pausar, extraer nuevos datos y continuar entrenando el modelo sin perder conocimiento previo.
+-   **Conteo Automático**: Sistema de conteo de objetos (paquetes) mediante cruce de líneas virtuales configurables (Horizontal/Vertical).
 -   **Arquitectura Robusta**: Lectura de video asíncrona (threading) para minimizar latencia.
 
 ## 📋 Requisitos Previos
@@ -55,8 +56,11 @@ Crea un archivo `.env` en la raíz del proyecto (basado en el ejemplo) y define 
 RTSP_CAMERAS="rtsp://admin:pass@ip:port/stream1,rtsp://admin:pass@ip:port/stream2"
 ```
 
-### 2. Ajustes Generales (config.yaml)
-Edita `config.yaml` para ajustar hiperparámetros de IA, umbrales de confianza o el tipo de tracker.
+### 2. Ajustes Generales y Conteo (config.yaml)
+Edita `config.yaml` para:
+-   Ajustar hiperparámetros de IA (confianza, modelo).
+-   **Configurar Líneas de Conteo**: Define las coordenadas `[x1, y1, x2, y2]` para dibujar líneas virtuales en cada cámara y contar los paquetes que las cruzan.
+    *(Ver comentarios dentro del archivo para ejemplos de líneas horizontales/verticales).*
 
 ## 🎮 Ejecución
 

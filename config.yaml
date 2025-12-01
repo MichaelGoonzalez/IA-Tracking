@@ -28,3 +28,24 @@ augmentations:
 conf_threshold: 0.25
 iou_threshold: 0.45
 tracker_type: "bytetrack.yaml" # Opciones: botsort.yaml, bytetrack.yaml
+
+# Configuración de Cámaras y Líneas de Conteo
+# Define las líneas imaginarias para cada cámara según su ID (orden de conexión/lista)
+#
+# GUÍA DE COORDENADAS [x1, y1, x2, y2]:
+# ---------------------------------------------------------
+# x1: Coordenada X inicial (Horizontal: 0 es izquierda)
+# y1: Coordenada Y inicial (Vertical: 0 es arriba)
+# x2: Coordenada X final
+# y2: Coordenada Y final
+#
+# Ejemplos comunes (para resolución 640x360):
+# - Línea Horizontal completa en el medio: [0, 180, 640, 180]
+# - Línea Vertical completa en el medio:   [320, 0, 320, 360]
+# ---------------------------------------------------------
+
+cameras:
+ # Camara Solter
+  1:
+    # Línea Vertical en x=320, desde y=0 hasta y=360
+    line: [250, 0, 250, 360]

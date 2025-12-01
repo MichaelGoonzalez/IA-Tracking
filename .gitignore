@@ -34,3 +34,7 @@ data/raw_labels/
 # IDE
 .vscode/
 .idea/
+
+# OS Specific
+.DS_Store
+Thumbs.db

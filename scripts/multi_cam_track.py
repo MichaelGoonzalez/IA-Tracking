@@ -10,6 +10,9 @@ import sys
 # Añadir el directorio raíz al path para poder importar utils si fuera necesario
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from utils.utils import load_config
+from utils.counter import LineCounter
+
 # Cargar variables de entorno desde .env (forzando ruta raíz)
 dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
 loaded = load_dotenv(dotenv_path)
@@ -79,6 +82,8 @@ class RTSPStream:
 
 def main():
     # 1. Cargar Configuración y Modelo
+    config = load_config("config.yaml")
+    
     model_path = "models/paquetes_tracking/weights/best.pt"
     if not os.path.exists(model_path):
         print(f"[WARN] No se encontró modelo entrenado en {model_path}, usando yolov8n.pt base")
@@ -86,6 +91,19 @@ def main():
     
     print(f"[INFO] Cargando modelo: {model_path}")
     model = YOLO(model_path)
+
+    # Inicializar contadores por cámara según config
+    counters = {}
+    cam_configs = config.get("cameras", {})
+    if cam_configs:
+        for cam_id_str, settings in cam_configs.items():
+            line_coords = settings.get("line")
+            if line_coords:
+                # line_coords viene como [x1, y1, x2, y2]
+                start_pt = (line_coords[0], line_coords[1])
+                end_pt = (line_coords[2], line_coords[3])
+                counters[int(cam_id_str)] = LineCounter(start_pt, end_pt, model.names)
+                print(f"[INFO] Contador configurado para cámara {cam_id_str}: {start_pt} -> {end_pt}")
 
     # 2. Inicializar Cámaras
     streams = []
@@ -194,17 +212,39 @@ def main():
             # 2. Rellenar activos con los resultados procesados
             # results es una lista correspondiente a frames_to_process
             for i, r in enumerate(results):
+                # Recuperar índice original de la cámara
+                original_cam_idx = active_streams_indices[i]
+                cam_id = streams[original_cam_idx].cam_id
+                
                 # r.plot() devuelve el frame BGR con anotaciones dibujadas
                 annotated_frame = r.plot()
+
+                # --- LÓGICA DE CONTEO ---
+                if cam_id in counters:
+                    counter = counters[cam_id]
+                    # Extraer cajas y IDs si hay detecciones
+                    if r.boxes and r.boxes.id is not None:
+                        # r.boxes.xyxy tiene coordenadas, r.boxes.id tiene IDs, r.boxes.cls tiene clases
+                        boxes = r.boxes.xyxy.cpu().numpy()
+                        track_ids = r.boxes.id.cpu().numpy()
+                        cls_ids = r.boxes.cls.cpu().numpy()
+                        
+                        detections = []
+                        for box, track_id, cls_id in zip(boxes, track_ids, cls_ids):
+                            x1, y1, x2, y2 = box
+                            detections.append((x1, y1, x2, y2, track_id, cls_id))
+                        
+                        counter.update(detections)
+                    
+                    # Dibujar línea y conteo sobre el frame anotado
+                    annotated_frame = counter.draw(annotated_frame)
+                # -------------------------
                 
                 # Redimensionar para el grid
                 annotated_frame = cv2.resize(annotated_frame, (target_w, target_h))
                 
-                # Recuperar índice original de la cámara
-                original_cam_idx = active_streams_indices[i]
-                
                 # Añadir etiqueta de cámara sobre el video
-                cv2.putText(annotated_frame, f"CAM {streams[original_cam_idx].cam_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(annotated_frame, f"CAM {cam_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 
                 final_display_frames[original_cam_idx] = annotated_frame
 

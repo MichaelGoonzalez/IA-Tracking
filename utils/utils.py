@@ -14,7 +14,7 @@ def load_config(config_path="config.yaml"):
         logger.error(f"Archivo de configuración no encontrado: {config_path}")
         raise FileNotFoundError(f"No se encontró el archivo de configuración: {config_path}")
     
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         try:
             config = yaml.safe_load(f)
             logger.info("Configuración cargada exitosamente.")
