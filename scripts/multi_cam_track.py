@@ -3,6 +3,7 @@ import threading
 import os
 import time
 import numpy as np
+import torch
 from dotenv import load_dotenv
 from ultralytics import YOLO
 import sys
@@ -10,7 +11,7 @@ import sys
 # Añadir el directorio raíz al path para poder importar utils si fuera necesario
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.utils import load_config
+from utils.utils import load_config, get_device
 from utils.counter import LineCounter
 
 # Cargar variables de entorno desde .env (forzando ruta raíz)
@@ -84,6 +85,14 @@ def main():
     # 1. Cargar Configuración y Modelo
     config = load_config("config.yaml")
     
+    # --- OPTIMIZACIÓN GPU ---
+    device = get_device(config.get("device"))
+    if device != "cpu":
+        print(f"[INFO] 🚀 SISTEMA OPTIMIZADO: Usando GPU {torch.cuda.get_device_name(0)} para inferencia.")
+    else:
+        print("[WARN] ⚠️ GPU no detectada. El sistema usará CPU (puede ser lento).")
+    # ------------------------
+
     model_path = "models/paquetes_tracking/weights/best.pt"
     if not os.path.exists(model_path):
         print(f"[WARN] No se encontró modelo entrenado en {model_path}, usando yolov8n.pt base")
@@ -95,15 +104,22 @@ def main():
     # Inicializar contadores por cámara según config
     counters = {}
     cam_configs = config.get("cameras", {})
+    print(f"[DEBUG] Configuración de cámaras encontrada: {cam_configs}") # DEBUG
+    
     if cam_configs:
         for cam_id_str, settings in cam_configs.items():
+            if not settings: continue
             line_coords = settings.get("line")
             if line_coords:
-                # line_coords viene como [x1, y1, x2, y2]
-                start_pt = (line_coords[0], line_coords[1])
-                end_pt = (line_coords[2], line_coords[3])
+                # Asegurar enteros
+                start_pt = (int(line_coords[0]), int(line_coords[1]))
+                end_pt = (int(line_coords[2]), int(line_coords[3]))
                 counters[int(cam_id_str)] = LineCounter(start_pt, end_pt, model.names)
                 print(f"[INFO] Contador configurado para cámara {cam_id_str}: {start_pt} -> {end_pt}")
+            else:
+                print(f"[WARN] Cámara {cam_id_str} no tiene 'line' configurada.")
+    else:
+        print("[WARN] No se encontró sección 'cameras' en config.yaml o está vacía.")
 
     # 2. Inicializar Cámaras
     streams = []
@@ -186,6 +202,7 @@ def main():
                 conf=0.25, 
                 iou=0.45, 
                 tracker="bytetrack.yaml", 
+                device=device, # Forzar uso de GPU/CPU detectado
                 verbose=False
             )
 
