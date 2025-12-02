@@ -82,11 +82,17 @@ class RTSPStream:
             self.t.join()
         self.cap.release()
 
-def main(video_source=None):
+def main(video_source=None, headless=False):
     """
     Función principal de tracking multi-cámara.
     :param video_source: Ruta a un archivo de video local para pruebas. Si es None, usa RTSP desde .env.
+    :param headless: Si es True, no muestra la interfaz gráfica (útil para servidores o ejecución en background).
     """
+    if headless:
+        print("[INFO] Ejecutando en modo HEADLESS (Sin interfaz gráfica).")
+        print("[INFO] El sistema procesará video y enviará datos a la API en segundo plano.")
+        print("[INFO] Presione Ctrl+C para detener.")
+
     # 1. Cargar Configuración y Modelo
     config = load_config("config.yaml")
     
@@ -234,37 +240,12 @@ def main(video_source=None):
                 verbose=False
             )
 
-            # --- Construcción del Grid de Visualización ---
-            
-            # Crear lista completa de frames para el grid (incluyendo los inactivos/negros)
-            final_display_frames = [None] * num_cams
-            
-            # 1. Rellenar inactivos con negro
-            for i in range(num_cams):
-                blank = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-                status_text = "NO SIGNAL / CONNECTING..."
-                color = (0, 0, 255) # Rojo
-                
-                # Si la cámara está conectada pero no dio frame en este instante preciso
-                if streams[i].connected:
-                    status_text = "NO FRAME"
-                    color = (0, 255, 255) # Amarillo
-
-                cv2.putText(blank, f"CAM {i+1}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.putText(blank, status_text, (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-                final_display_frames[i] = blank
-
-            # 2. Rellenar activos con los resultados procesados
-            # results es una lista correspondiente a frames_to_process
+            # --- LÓGICA DE CONTEO (Ejecutar siempre, con o sin GUI) ---
+            # Procesamos los resultados para actualizar contadores
             for i, r in enumerate(results):
-                # Recuperar índice original de la cámara
                 original_cam_idx = active_streams_indices[i]
                 cam_id = streams[original_cam_idx].cam_id
                 
-                # r.plot() devuelve el frame BGR con anotaciones dibujadas
-                annotated_frame = r.plot()
-
-                # --- LÓGICA DE CONTEO ---
                 if cam_id in counters:
                     counter = counters[cam_id]
                     # Extraer cajas y IDs si hay detecciones
@@ -280,51 +261,77 @@ def main(video_source=None):
                             detections.append((x1, y1, x2, y2, track_id, cls_id))
                         
                         counter.update(detections)
+
+            # --- Construcción del Grid de Visualización (SOLO SI NO ES HEADLESS) ---
+            if not headless:
+                # Crear lista completa de frames para el grid (incluyendo los inactivos/negros)
+                final_display_frames = [None] * num_cams
+                
+                # 1. Rellenar inactivos con negro
+                for i in range(num_cams):
+                    blank = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+                    status_text = "NO SIGNAL / CONNECTING..."
+                    color = (0, 0, 255) # Rojo
                     
-                    # Dibujar línea y conteo sobre el frame anotado
-                    annotated_frame = counter.draw(annotated_frame)
-                # -------------------------
-                
-                # Redimensionar para el grid
-                annotated_frame = cv2.resize(annotated_frame, (target_w, target_h))
-                
-                # Añadir etiqueta de cámara sobre el video
-                cv2.putText(annotated_frame, f"CAM {cam_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                
-                final_display_frames[original_cam_idx] = annotated_frame
+                    # Si la cámara está conectada pero no dio frame en este instante preciso
+                    if streams[i].connected:
+                        status_text = "NO FRAME"
+                        color = (0, 255, 255) # Amarillo
 
-            # 3. Ensamblar Grid
-            grid_rows = []
-            for r in range(rows):
-                # Obtener frames de esta fila
-                start_idx = r * cols
-                end_idx = min((r + 1) * cols, num_cams)
-                row_frames = final_display_frames[start_idx : end_idx]
+                    cv2.putText(blank, f"CAM {i+1}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    cv2.putText(blank, status_text, (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                    final_display_frames[i] = blank
+
+                # 2. Rellenar activos con los resultados procesados visualmente
+                for i, r in enumerate(results):
+                    original_cam_idx = active_streams_indices[i]
+                    cam_id = streams[original_cam_idx].cam_id
+                    
+                    # r.plot() devuelve el frame BGR con anotaciones dibujadas
+                    annotated_frame = r.plot()
+
+                    # Dibujar línea y conteo sobre el frame anotado si hay contador
+                    if cam_id in counters:
+                        annotated_frame = counters[cam_id].draw(annotated_frame)
+                    
+                    # Redimensionar para el grid
+                    annotated_frame = cv2.resize(annotated_frame, (target_w, target_h))
+                    
+                    # Añadir etiqueta de cámara sobre el video
+                    cv2.putText(annotated_frame, f"CAM {cam_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    
+                    final_display_frames[original_cam_idx] = annotated_frame
+
+                # 3. Ensamblar Grid
+                grid_rows = []
+                for r in range(rows):
+                    start_idx = r * cols
+                    end_idx = min((r + 1) * cols, num_cams)
+                    row_frames = final_display_frames[start_idx : end_idx]
+                    while len(row_frames) < cols:
+                        row_frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
+                    grid_rows.append(np.hstack(row_frames))
                 
-                # Si la fila está incompleta (ej. última fila con 1 cámara de 3), rellenar con negro
-                while len(row_frames) < cols:
-                    row_frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
-                
-                # Unir horizontalmente
-                grid_rows.append(np.hstack(row_frames))
-            
-            # Unir verticalmente las filas
-            if len(grid_rows) > 0:
-                final_grid = np.vstack(grid_rows)
+                if len(grid_rows) > 0:
+                    final_grid = np.vstack(grid_rows)
+                else:
+                    final_grid = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+
+                # 4. Mostrar Grid
+                if final_grid.shape[0] > 1000:
+                    scale_factor = 1000 / final_grid.shape[0]
+                    final_grid = cv2.resize(final_grid, None, fx=scale_factor, fy=scale_factor)
+
+                cv2.imshow("Sistema Multi-Camara IA Tracking", final_grid)
+
+                # Salir con 'q'
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
             else:
-                final_grid = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-
-            # 4. Mostrar Grid
-            # Reducir un poco si es muy grande para la pantalla
-            if final_grid.shape[0] > 1000:
-                scale_factor = 1000 / final_grid.shape[0]
-                final_grid = cv2.resize(final_grid, None, fx=scale_factor, fy=scale_factor)
-
-            cv2.imshow("Sistema Multi-Camara IA Tracking", final_grid)
-
-            # Salir con 'q'
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+                # En modo headless, solo esperamos un poco para no saturar si va muy rápido
+                # Aunque la inferencia ya consume tiempo.
+                # También verificamos si el usuario quiere salir con un mecanismo alternativo, pero KeyboardInterrupt lo maneja.
+                pass
 
     except KeyboardInterrupt:
         print("[INFO] Interrupción de teclado recibida.")
