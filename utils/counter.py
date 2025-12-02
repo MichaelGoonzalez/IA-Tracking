@@ -5,15 +5,17 @@ class LineCounter:
     """
     Clase para contar objetos que cruzan una línea definida.
     """
-    def __init__(self, start_point, end_point, class_names):
+    def __init__(self, start_point, end_point, class_names, on_count_callback=None):
         """
         :param start_point: Tupla (x, y) de inicio de la línea.
         :param end_point: Tupla (x, y) de fin de la línea.
         :param class_names: Diccionario de nombres de clases {0: 'paquete', ...}
+        :param on_count_callback: Función a llamar cuando se cuenta un objeto. Firma: func(class_name)
         """
         self.start_point = start_point
         self.end_point = end_point
         self.class_names = class_names
+        self.on_count_callback = on_count_callback
         
         # Almacenar la posición anterior de los objetos: {track_id: (x, y)}
         self.track_history = {}
@@ -49,6 +51,13 @@ class LineCounter:
                         self.counts[class_name] = self.counts.get(class_name, 0) + 1
                         self.total_count += 1
                         self.counted_ids.add(track_id)
+                        
+                        # Ejecutar callback si existe
+                        if self.on_count_callback:
+                            try:
+                                self.on_count_callback(class_name)
+                            except Exception as e:
+                                print(f"[ERROR] Fallo en callback de conteo: {e}")
             
             # Actualizar historia
             self.track_history[track_id] = current_point

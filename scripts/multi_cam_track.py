@@ -13,6 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.utils import load_config, get_device
 from utils.counter import LineCounter
+from utils.api_client import send_count_data
 
 # Cargar variables de entorno desde .env (forzando ruta raíz)
 dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -81,7 +82,11 @@ class RTSPStream:
             self.t.join()
         self.cap.release()
 
-def main():
+def main(video_source=None):
+    """
+    Función principal de tracking multi-cámara.
+    :param video_source: Ruta a un archivo de video local para pruebas. Si es None, usa RTSP desde .env.
+    """
     # 1. Cargar Configuración y Modelo
     config = load_config("config.yaml")
     
@@ -110,11 +115,26 @@ def main():
         for cam_id_str, settings in cam_configs.items():
             if not settings: continue
             line_coords = settings.get("line")
+            terminal_id = settings.get("terminal_id") # ID para la API
+            
             if line_coords:
                 # Asegurar enteros
                 start_pt = (int(line_coords[0]), int(line_coords[1]))
                 end_pt = (int(line_coords[2]), int(line_coords[3]))
-                counters[int(cam_id_str)] = LineCounter(start_pt, end_pt, model.names)
+                
+                # Definir callback para API si hay terminal_id
+                callback = None
+                if terminal_id:
+                    # Usamos una función lambda o closure para capturar el terminal_id actual
+                    # Necesitamos forzar el valor de terminal_id=terminal_id para que no tome el último del bucle
+                    def make_callback(tid):
+                        return lambda label: send_count_data(tid, label)
+                    callback = make_callback(terminal_id)
+                    print(f"[INFO] API Callback configurado para cámara {cam_id_str} (ID: {terminal_id})")
+                else:
+                    print(f"[WARN] Cámara {cam_id_str} no tiene 'terminal_id'. No se enviarán datos a API.")
+
+                counters[int(cam_id_str)] = LineCounter(start_pt, end_pt, model.names, on_count_callback=callback)
                 print(f"[INFO] Contador configurado para cámara {cam_id_str}: {start_pt} -> {end_pt}")
             else:
                 print(f"[WARN] Cámara {cam_id_str} no tiene 'line' configurada.")
@@ -124,34 +144,42 @@ def main():
     # 2. Inicializar Cámaras
     streams = []
     
-    # Intentar leer formato de lista separada por comas (RTSP_CAMERAS)
-    cameras_env = os.getenv("RTSP_CAMERAS")
-    print(f"[DEBUG] Valor crudo de RTSP_CAMERAS: {cameras_env}")
-    
-    if cameras_env:
-        # Dividir por comas y limpiar
-        urls = [u.strip().strip('"').strip("'") for u in cameras_env.split(',') if u.strip()]
-        for i, url in enumerate(urls, 1):
-            print(f"[INFO] Inicializando cámara {i}...")
-            stream = RTSPStream(url, i)
-            streams.append(stream)
+    if video_source:
+        print(f"[INFO] MODO PRUEBA: Usando archivo de video: {video_source}")
+        print(f"[INFO] Se usará la configuración de la Cámara 1 para conteo y API.")
+        # Creamos un único stream con el video y ID=1
+        stream = RTSPStream(video_source, 1)
+        streams.append(stream)
     else:
-        # Fallback a formato antiguo RTSP_CAM_1, RTSP_CAM_2...
-        i = 1
-        while True:
-            url = os.getenv(f"RTSP_CAM_{i}")
-            if not url:
-                break
-            url = url.strip('"').strip("'")
-            if url:
+        # Modo Normal: Leer RTSP desde .env
+        # Intentar leer formato de lista separada por comas (RTSP_CAMERAS)
+        cameras_env = os.getenv("RTSP_CAMERAS")
+        print(f"[DEBUG] Valor crudo de RTSP_CAMERAS: {cameras_env}")
+        
+        if cameras_env:
+            # Dividir por comas y limpiar
+            urls = [u.strip().strip('"').strip("'") for u in cameras_env.split(',') if u.strip()]
+            for i, url in enumerate(urls, 1):
                 print(f"[INFO] Inicializando cámara {i}...")
                 stream = RTSPStream(url, i)
                 streams.append(stream)
-            i += 1
+        else:
+            # Fallback a formato antiguo RTSP_CAM_1, RTSP_CAM_2...
+            i = 1
+            while True:
+                url = os.getenv(f"RTSP_CAM_{i}")
+                if not url:
+                    break
+                url = url.strip('"').strip("'")
+                if url:
+                    print(f"[INFO] Inicializando cámara {i}...")
+                    stream = RTSPStream(url, i)
+                    streams.append(stream)
+                i += 1
 
-    if not streams:
-        print("[ERROR] No se encontraron cámaras configuradas en el archivo .env (Variable RTSP_CAMERAS o RTSP_CAM_X)")
-        return
+        if not streams:
+            print("[ERROR] No se encontraron cámaras configuradas en el archivo .env (Variable RTSP_CAMERAS o RTSP_CAM_X)")
+            return
 
     # Iniciar hilos de lectura
     for stream in streams:
